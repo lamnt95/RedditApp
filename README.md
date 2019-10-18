@@ -1,2 +1,0 @@
-# RedditApp
-Created with CodeSandbox
