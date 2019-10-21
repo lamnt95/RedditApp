@@ -1,5 +1,6 @@
 import Immutable from "seamless-immutable";
 import _ from "lodash";
+import { Observable } from "rxjs";
 import postServices from "../../services/postService";
 
 export const types = {
@@ -54,17 +55,22 @@ export const actions = {
 };
 
 const getPost = state => _.get(state, "post.posts");
+const getPostDetail = (state, id) => _.get(state, ["post.posts", id]);
 const getSubredditsDetail = (state, subredditName) =>
   _.get(state, ["post.subreddit", subredditName]);
 
 export const selectors = {
   getPost,
+  getPostDetail,
   getSubredditsDetail
 };
 
 const _initialState = Immutable.from({
   posts: Immutable.from({}),
-  subreddit: Immutable.from({})
+  subreddit: Immutable.from({
+    reactjs: Immutable.from([]),
+    frontend: Immutable.from([])
+  })
 });
 
 export default (state = _initialState, { type, payload }) => {
@@ -80,13 +86,14 @@ export default (state = _initialState, { type, payload }) => {
 
     case types.ADD_MANY_POST_SUBREDDIT: {
       const posts = _.get(payload, "posts");
-      const subreddit = _.get(payload, "posts[0].subreddit");
+      const subreddit = _.get(payload, "posts[0].subreddit").toLowerCase();
       const subredditIDs = _.map(posts, item => _.get(item, "id"));
       return Immutable.setIn(state, ["subreddit", subreddit], subredditIDs);
     }
 
     case types.REMOVE_POST: {
-      const { subreddit, id: idRemove } = _.get(payload, "posts[0]");
+      const subreddit = _.get(payload, "posts[0].subreddit").toLowerCase();
+      const idRemove = _.get(payload, "posts[0].id");
       const currentState = _.get(state, `subreddit.${subreddit}`);
       const newState = currentState.filter(({ id }) => id !== idRemove);
       return Immutable.setIn(state, ["subreddit", subreddit], newState);
@@ -97,24 +104,20 @@ export default (state = _initialState, { type, payload }) => {
   }
 };
 
-const requestPostStartMiddleware = () => next => ({ type, payload }) => {
-  if (type === types.REQUEST_POST_START) {
-    const subreddit = _.get(payload, "subreddit") || "";
-    postServices
-      .requestPost(subreddit)
-      .then(posts => next(actions.requestPostSuccess({ posts })))
-      .catch(error => next(actions.requestPostFail(error)));
-  }
-};
+const requestPostStartEpic = action$ =>
+  action$.ofType(types.REQUEST_POST_START).mergeMap(
+    ({ payload }) =>
+      new Observable(observer => {
+        const subreddit = _.get(payload, "subredditName") || "";
+        postServices
+          .requestPost(subreddit)
+          .then(posts => {
+            observer.next(actions.requestPostSuccess({ posts }));
+            observer.next(actions.addManyPost({ posts }));
+            observer.next(actions.addManyPostSubReddit({ posts }));
+          })
+          .catch(error => observer.next(actions.requestPostFail(error)));
+      })
+  );
 
-const requestPostSuccessMiddleware = () => next => ({ type, payload }) => {
-  if (type === types.REQUEST_POST_SUCCESS) {
-    next(actions.addManyPost(payload));
-    next(actions.addManyPostSubReddit(payload));
-  }
-};
-
-export const middlewares = [
-  requestPostStartMiddleware,
-  requestPostSuccessMiddleware
-];
+export const epics = [requestPostStartEpic];
