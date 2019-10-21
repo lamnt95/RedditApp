@@ -53,7 +53,14 @@ export const actions = {
   })
 };
 
-export const selectors = {};
+const getPost = state => _.get(state, "post.posts");
+const getSubredditsDetail = (state, subredditName) =>
+  _.get(state, ["post.subreddit", subredditName]);
+
+export const selectors = {
+  getPost,
+  getSubredditsDetail
+};
 
 const _initialState = Immutable.from({
   posts: Immutable.from({}),
@@ -64,12 +71,17 @@ export default (state = _initialState, { type, payload }) => {
   switch (type) {
     case types.ADD_MANY_POST:
       const posts = _.get(payload, "posts");
-      return Immutable.setIn(state, ["posts"], posts);
+      const postsKeyby = _.keyBy(posts, "id");
+      const currentState = _.get(state, "posts");
+      const newState = Immutable.merge(currentState, postsKeyby, {
+        deep: true
+      });
+      return Immutable.setIn(state, ["posts"], newState);
 
     case types.ADD_MANY_POST_SUBREDDIT: {
       const posts = _.get(payload, "posts");
       const subreddit = _.get(payload, "posts[0].subreddit");
-      const subredditIDs = _.map(posts, item => item.id);
+      const subredditIDs = _.map(posts, item => _.get(item, "id"));
       return Immutable.setIn(state, ["subreddit", subreddit], subredditIDs);
     }
 
@@ -85,16 +97,17 @@ export default (state = _initialState, { type, payload }) => {
   }
 };
 
-const requestPostStartMiddleware = store => next => ({ type, payload }) => {
+const requestPostStartMiddleware = () => next => ({ type, payload }) => {
   if (type === types.REQUEST_POST_START) {
     const subreddit = _.get(payload, "subreddit") || "";
-    postServices.requestPost(subreddit).then(res => console.log(res));
-    // .then(posts => next(actions.requestPostSuccess({ posts })))
-    // .catch(error => next(actions.requestPostFail(error)));
+    postServices
+      .requestPost(subreddit)
+      .then(posts => next(actions.requestPostSuccess({ posts })))
+      .catch(error => next(actions.requestPostFail(error)));
   }
 };
 
-const requestPostSuccessMiddleware = store => next => ({ type, payload }) => {
+const requestPostSuccessMiddleware = () => next => ({ type, payload }) => {
   if (type === types.REQUEST_POST_SUCCESS) {
     next(actions.addManyPost(payload));
     next(actions.addManyPostSubReddit(payload));
