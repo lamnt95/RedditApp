@@ -1,12 +1,15 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import "./styles.css";
+import { Provider } from "react-redux";
+import store from "./store/store";
 
 function App() {
   return (
-    <div className="App">
-      <h1>App reddit</h1>
-    </div>
+    <Provider store={store}>
+      <div className="App">
+        <h1>App reddit</h1>
+      </div>
+    </Provider>
   );
 }
 
